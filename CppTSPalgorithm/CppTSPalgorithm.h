@@ -47,6 +47,7 @@ private:
     void ConnectLeftTop();
     void LogicMain();
     void LogicMethod(unsigned short int ThreadNum);
+    void Test();
     //void LogicMulti(unsigned short int ThreadNum);
 
 
