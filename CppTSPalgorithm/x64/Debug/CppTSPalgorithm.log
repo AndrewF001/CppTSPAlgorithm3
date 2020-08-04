@@ -1,0 +1,12 @@
+﻿  uic CppTSPalgorithm.ui
+  rcc CppTSPalgorithm.qrc
+   RCC: Warning: No resources in 'C:\Users\andre\Documents\GitHub\CppTSPAlgorithm3\CppTSPalgorithm\CppTSPalgorithm.qrc'.
+  MyTimer.cpp
+  MyVector.cpp
+  Point.cpp
+  QuadTree.cpp
+  CppTSPalgorithm.cpp
+  main.cpp
+  moc_CppTSPalgorithm.cpp
+  qrc_CppTSPalgorithm.cpp
+  CppTSPalgorithm.vcxproj -> C:\Users\andre\Documents\GitHub\CppTSPAlgorithm3\x64\Debug\CppTSPalgorithm.exe

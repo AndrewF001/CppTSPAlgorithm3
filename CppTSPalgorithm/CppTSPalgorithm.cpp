@@ -1,0 +1,842 @@
+#include "CppTSPalgorithm.h"
+#include "qpainter.h"
+#include <thread>
+#include <math.h>
+#include <iostream>
+#include "MyVector.h"
+
+//constructor, just links all the UI elements to their EventHandler slot
+CppTSPalgorithm::CppTSPalgorithm(QWidget *parent)
+    : QMainWindow(parent)
+{
+    ui.setupUi(this);
+    //connects UI event handlers to their methods
+    connect(ui.StartBtn, SIGNAL(clicked()), this, SLOT(StartBtnClicked()));
+    connect(ui.DelayBox, SIGNAL(valueChanged(int)), this,SLOT(DelayBoxChanged(int)));
+    connect(ui.DotsBtn, SIGNAL(clicked()), this, SLOT(DotsBtnClicked()));
+    connect(ui.DotsBox, QOverload<int>::of(&QSpinBox::valueChanged), [=](int i) {NumDots = i; });
+    connect(ui.ShowGridCheck, SIGNAL(toggled(bool)),this, SLOT(ShowGridMeth(bool)));
+    connect(ui.FastModeCheck, SIGNAL(toggled(bool)), this, SLOT(FastModeMeth(bool)));
+    connect(ui.FPSBox, SIGNAL(valueChanged(int)), this, SLOT(FPSBoxChanged(int)));
+}
+
+//All grathics are done here
+void CppTSPalgorithm::paintEvent(QPaintEvent* event)
+{
+    QPainter Painter(this);
+    DrawCanvas(&Painter);
+    DrawPoints(&Painter);
+    UpdateTimers();
+    DrawGrid(&Painter);
+    DrawRoute(&Painter);
+}
+
+//All grapical methods bellow untill at the event handlers
+void CppTSPalgorithm::DrawCanvas(QPainter* painter)
+{
+    QPen Pen(Qt::black);
+    Pen.setWidth(3);
+    painter->setPen(Pen);
+    painter->drawRect(10, 80, 1820, 860);
+}
+void CppTSPalgorithm::DrawPoints(QPainter* painter)
+{
+    QPen Pen(Qt::black);
+    Pen.setWidth(2);
+    painter->setPen(Pen);
+    if (!Points.empty())
+    {
+        for (int i = 0; i < Points.size(); i++)
+        {
+            painter->drawEllipse(Points[i].X+15, Points[i].Y+85, 2, 2);
+        }
+    }
+}
+void CppTSPalgorithm::UpdateTimers()
+{
+    if (ProgramRunning)
+    {
+        std::chrono::steady_clock::duration durration = Timer.Time();
+        ui.TimerLabNS->setText(QString::number(durration.count()));
+        ui.TimerLabS->setText(QString::number(durration.count() / pow(10, 9)));
+    }
+}
+void CppTSPalgorithm::UIUpdateMethod()
+{
+    repaint();
+    while (Render)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000/FPS));
+        repaint();
+    }
+}
+void CppTSPalgorithm::DrawGrid(QPainter* painter)
+{
+    if(ShowGrid && ParentNode!=nullptr)
+        ParentNode->DrawRect(painter);
+}
+void CppTSPalgorithm::DrawRoute(QPainter* painter)
+{
+    if (RouteSize>1)
+    {
+        QPen Pen(Qt::black);
+        Pen.setWidth(1);
+        painter->setPen(Pen);
+        StartNode->DrawConenctions(painter,StartNode);
+    }
+}
+
+//All event handlers are bellow untill main block of code
+//StartBtnClicked is the entry point into the code.
+void CppTSPalgorithm::StartBtnClicked()
+{
+    if (AddedDots && !SetUpRunning && !ProgramRunning)
+    {
+        //setup
+        Timer.Reset();
+        ProgramRunning = true;      
+        Render = true;
+        //Create QuadTree
+        std::thread QuadThread (&CppTSPalgorithm::CreateQuadTreeMain,this);
+        UIUpdateMethod();
+        QuadThread.join();
+        //Find valuable points
+        Render = true;
+        std::thread SearchThread(&CppTSPalgorithm::FindPointMain, this);
+        UIUpdateMethod();
+        SearchThread.join();
+        //create the circle
+        Render = true;
+        std::thread ConnectThread(&CppTSPalgorithm::ConnecterMain, this);
+        UIUpdateMethod();
+        ConnectThread.join();
+        //Makes the link towards to middle
+        Render = true;
+        std::fill_n(Distance, NumThreads, 3604);
+        std::fill_n(DeltaDistance, NumThreads, 3604);
+        std::thread LogicThread(&CppTSPalgorithm::LogicMain, this);
+        UIUpdateMethod();
+        LogicThread.join();
+
+        AddedDots = false;
+        ProgramRunning = false;
+        UpdateTimers();
+    }
+    else if (!AddedDots && !ProgramRunning)
+    {
+        DotsBtnClicked();
+        StartBtnClicked();
+    }
+}
+
+void CppTSPalgorithm::DelayBoxChanged(int value)
+{
+    Delay = value;
+    CheckFastMode();
+}
+void CppTSPalgorithm::DotsBtnClicked()
+{
+    if (!SetUpRunning)
+    {        
+        AddedDots = true;
+        SetUpRunning = true;
+        Render = true;
+        std::thread CPointThread (&CppTSPalgorithm::CreatePoints,this);
+        UIUpdateMethod();
+        CPointThread.join();   
+    }    
+}
+void CppTSPalgorithm::ShowGridMeth(bool value)
+{    
+    ShowGrid = value;
+    CheckFastMode();
+    update();
+}
+void CppTSPalgorithm::FastModeMeth(bool value)
+{
+    //when changing the value of the other UI it would override FastMode so that's why done in this order
+    if (value)
+    {
+        ui.ShowGridCheck->setCheckState(Qt::CheckState::Unchecked);
+        ui.DelayBox->setValue(0);
+        ui.FPSBox->setValue(0);
+    }
+    FastMode = value;
+    if (value)
+        ui.FastModeCheck->setCheckState(Qt::CheckState::Checked);
+}
+void CppTSPalgorithm::FPSBoxChanged(int value)
+{
+    FPS = value;
+    CheckFastMode();
+}
+//repeated code
+void CppTSPalgorithm::CheckFastMode()
+{
+    if (FastMode)
+    {
+        FastMode = false;
+        ui.FastModeCheck->setCheckState(Qt::CheckState::Unchecked);
+    }
+}
+
+//Main block of code
+//sets up the points and their location
+void CppTSPalgorithm::CreatePoints()
+{
+    ResetVaraibles();
+
+    std::srand((unsigned)time(0));
+    ParentNode = new QuadTree(-1, -1, 1802, 842);
+
+    Points.reserve(NumDots);
+    for (int i = 0; i < NumDots; i++)
+    {
+        unsigned short int x = std::rand() % 1800;
+        unsigned short int y = std::rand() % 840;
+        Points.push_back(Point(x, y));        
+        for (int c = 0; c < i; c++)
+        {
+            if (Points[c].X == Points[i].X && Points[c].Y == Points[i].Y)
+            {
+                Points.pop_back();
+                i--;
+                c = i;
+            }
+        }
+    }
+    SetUpRunning = false;
+    Render = false;
+}
+void CppTSPalgorithm::ResetVaraibles()
+{
+    Points.clear();
+    delete(ParentNode);
+    Top.clear();
+    Right.clear();
+    Bottom.clear();
+    Left.clear();
+    RouteSize = 0;
+    NextWidthHeight.clear();
+    NextWidthHeight.push_back(3604);
+    std::fill_n(Distance, NumThreads, 3604);
+    std::fill_n(DeltaDistance, NumThreads, 3604);   
+}
+//Quad tree creation methods
+void CppTSPalgorithm::CreateQuadTreeMain()
+{
+    ParentNode->Insert(&Points[0]);
+    ParentNode->Insert(&Points[1]);
+    if (NumThreads == 1)
+    {
+        CreateQuadTreeSub(0);
+        CreateQuadTreeSub(1);
+        CreateQuadTreeSub(2);
+        CreateQuadTreeSub(3);
+    }
+    else
+    {
+        std::thread TreeThreads[4];
+        for (int i = 0; i < 4; i++)
+        {
+            //int* temp = new int(i);
+            TreeThreads[i] = std::thread(&CppTSPalgorithm::CreateQuadTreeSub, this, i);
+        }
+        for (int i = 0; i < 4; i++)
+        {
+            TreeThreads[i].join();
+        }
+    }
+    Render = false;
+}
+void CppTSPalgorithm::CreateQuadTreeSub(int section)
+{
+    for (int i = 2; i < NumDots; i++)
+    {
+        ParentNode->SubTree[section].Insert(&Points[i]);
+    }
+
+}
+//valuable points methods
+void CppTSPalgorithm::FindPointMain()
+{
+    std::thread SearchThreads[4];
+    if (NumThreads == 1)
+    {
+        FindTopPoint();
+        FindRightPoint();
+        FindBottomPoint();
+        FindLeftPoint();
+    }
+    else
+    {
+        SearchThreads[0] = std::thread(&CppTSPalgorithm::FindTopPoint, this);
+        SearchThreads[1] = std::thread(&CppTSPalgorithm::FindRightPoint, this);
+        SearchThreads[2] = std::thread(&CppTSPalgorithm::FindBottomPoint, this);
+        SearchThreads[3] = std::thread(&CppTSPalgorithm::FindLeftPoint, this);
+        for (int i = 0; i < 4; i++)
+        {
+            SearchThreads[i].join();
+        }
+    }
+    Render = false;
+}
+void CppTSPalgorithm::FindTopPoint()
+{
+    int min = 99999;
+    for (int i = 0; i < NumDots; i++)
+    {
+        if (Points[i].Y < min)
+        {
+            Top.clear();
+            Top.push_back(&Points[i]);
+            min = Points[i].Y;
+        }
+        else if (Points[i].Y == min)
+        {
+            for (int c = 0; c < Top.size(); c++)
+            {
+                if (Points[i].X < Top[c]->X)
+                {
+                    Top.insert(Top.begin() + c, &Points[i]);
+                    c = Top.size();
+                }
+            }
+            if (Points[i].X > Top.back()->X)
+            {
+                Top.push_back(&Points[i]);
+            }
+        }
+    }
+}
+void CppTSPalgorithm::FindRightPoint()
+{
+    int max = -2;
+    for (int i = 0; i < NumDots; i++)
+    {
+        if (Points[i].X > max)
+        {
+            Right.clear();
+            Right.push_back(&Points[i]);
+            max = Points[i].X;
+        }
+        else if (Points[i].X == max)
+        {
+            for (int c = 0; c < Right.size(); c++)
+            {
+                if (Points[i].Y < Right[c]->Y)
+                {
+                    Right.insert(Right.begin() + c, &Points[i]);
+                    c = Right.size();
+                }
+            }
+            if (Points[i].Y > Right.back()->Y)
+            {
+                Right.push_back(&Points[i]);
+            }
+        }
+    }
+}
+void CppTSPalgorithm::FindBottomPoint()
+{
+    int max = -2;
+    for (int i = 0; i < NumDots; i++)
+    {
+        if (Points[i].Y > max)
+        {
+            Bottom.clear();
+            Bottom.push_back(&Points[i]);
+            max = Points[i].Y;
+        }
+        else if (Points[i].Y == max)
+        {
+            for (int c = 0; c < Bottom.size(); c++)
+            {
+                if (Points[i].X > Bottom[c]->X)
+                {
+                    Bottom.insert(Bottom.begin() + c, &Points[i]);
+                    c = Bottom.size();
+                }
+            }
+            if (Points[i].X < Bottom.back()->X)
+            {
+                Bottom.push_back(&Points[i]);
+            }
+        }
+    }
+}
+void CppTSPalgorithm::FindLeftPoint()
+{
+    int min = 99999;
+    for (int i = 0; i < NumDots; i++)
+    {
+        if (Points[i].X < min)
+        {
+            Left.clear();
+            Left.push_back(&Points[i]);
+            min = Points[i].X;
+        }
+        else if (Points[i].X == min)
+        {
+            for (int c = 0; c < Left.size(); c++)
+            {
+                if (Points[i].Y > Left[c]->Y)
+                {
+                    Left.insert(Left.begin() + c, &Points[i]);
+                    c = Left.size();
+                }
+            }
+            if (Points[i].Y < Left.back()->Y)
+            {
+                Left.push_back(&Points[i]);
+            }
+        }
+    }
+}
+//create outer circle
+void CppTSPalgorithm::ConnecterMain()
+{
+    if (NumThreads == 1)
+    {
+        ConnectTopRight();
+        ConnectRightBottom();
+        ConnectBottomLeft();
+        ConnectLeftTop();
+    }
+    else
+    {
+        std::thread Connecters[4];
+        Connecters[0] = std::thread(&CppTSPalgorithm::ConnectTopRight, this);
+        Connecters[1] = std::thread(&CppTSPalgorithm::ConnectRightBottom, this);
+        Connecters[2] = std::thread(&CppTSPalgorithm::ConnectBottomLeft, this);
+        Connecters[3] = std::thread(&CppTSPalgorithm::ConnectLeftTop, this);
+        for (int i = 0; i < 4; i++)
+        {
+            Connecters[i].join();
+        }
+    }
+    //This is just to make sure there is no duplication(can occure if the point is the most vaulable in to sides)
+    if (Right.back() == Bottom[0])
+        Right.erase(Right.begin() + Right.size()-1);
+    if (Bottom.back() == Left[0])
+        Bottom.erase(Bottom.begin() + Bottom.size()-1);
+    if(Left.back() == Top[0])
+        Left.erase(Left.begin() + Left.size() - 1);
+    
+    //Create the linked list
+    StartNode = Top[0];
+    RouteSize = Top.size() + Right.size() + Bottom.size() + Left.size();    
+    //This merging of all the list and then decoding it into a link list isn't required and can hard code it for each vector
+    //It's quicker that way but means you need 4 times the code. I did it this way because the performance difference
+    //isn't going to be that noticable(I hope)
+    std::vector<Point*> Route;
+    Route.reserve(RouteSize);
+    Route.insert(Route.end(), Top.begin(), Top.end());
+    Route.insert(Route.end(), Right.begin(), Right.end());
+    Route.insert(Route.end(), Bottom.begin(), Bottom.end());
+    Route.insert(Route.end(), Left.begin(), Left.end());
+    Top.clear();
+    Right.clear();
+    Bottom.clear();
+    Left.clear();
+    //Decoding the vector to make a linked list
+    StartNode->Connected = true;
+    StartNode->NextPoint = Route[1];
+    StartNode->PreviousePoint = Route.back();
+    for (int i = 1; i < Route.size() - 1; i++)
+    {
+        Route[i]->Connected = true;
+        Route[i]->NextPoint = Route[i + 1];
+        Route[i]->PreviousePoint = Route[i - 1];
+    }
+    Route.back()->Connected = true;
+    Route.back()->NextPoint = Route[0];
+    Route.back()->PreviousePoint = Route[Route.size() - 2];
+        
+    Render = false;
+}
+void CppTSPalgorithm::ConnectTopRight()
+{
+    bool Run = true;
+    std::vector<Point*> TempList;
+    short int Rx;
+    short int Ry;
+    unsigned short int Rwidth;
+    unsigned short int Rheight;
+    while (Run)
+    {
+        TempList.clear();
+        Rx = Top.back()->X;
+        Ry = Top.back()->Y;
+        Rwidth = Right[0]->X - Rx + 1;
+        Rheight = Right[0]->Y - Ry + 1;
+        ParentNode->ContainArea(&TempList, Rx, Ry, Rwidth, Rheight);
+        Point* NextNode;
+        float SmallestGradient = 9999999;
+        float TempGradient;
+        if (!TempList.empty())
+        {
+            for (int i = 0; i < TempList.size(); i++)
+            {
+                if (TempList[i] != Top.back())
+                {
+                    TempGradient = ((double)TempList[i]->Y - (double)Top.back()->Y) / ((double)TempList[i]->X - (double)Top.back()->X);
+                    if (TempGradient < SmallestGradient)
+                    {
+                        SmallestGradient = TempGradient;
+                        NextNode = TempList[i];
+                    }
+                }
+            }
+            if (NextNode == Right[0]) //That warning shouldn't be a problem
+                Run = false;
+            else
+                Top.push_back(NextNode);
+        }
+        else
+        {
+            Run = false;
+        }
+    }
+}
+void CppTSPalgorithm::ConnectRightBottom()
+{
+    bool Run = true;
+    std::vector<Point*> TempList;
+    short int Rx;
+    short int Ry;
+    unsigned short int Rwidth;
+    unsigned short int Rheight;
+    while (Run)
+    {
+        TempList.clear();
+        Rx = Bottom[0]->X-1;
+        Ry = Right.back()->Y;
+        Rwidth = Right.back()->X - Rx+3;
+        Rheight = Bottom[0]->Y - Ry+1;
+        ParentNode->ContainArea(&TempList, Rx, Ry, Rwidth, Rheight);
+        Point* NextNode;
+        float SmallestGradient = 999999;
+        float TempGradient;
+        if (!TempList.empty())
+        {
+            for (int i = 0; i < TempList.size(); i++)
+            {
+                if (TempList[i] != Right.back())
+                {
+                    TempGradient = ((double)TempList[i]->Y - (double)Right.back()->Y) / ((double)TempList[i]->X - (double)Right.back()->X);
+                    if (TempGradient < SmallestGradient)
+                    {
+                        SmallestGradient = TempGradient;
+                        NextNode = TempList[i];
+                    }
+                }
+            }
+            if (NextNode == Bottom[0]) //That warning shouldn't be a problem
+                Run = false;
+            else
+                Right.push_back(NextNode);
+        }
+        else
+        {
+            Run = false;
+        }
+    }
+}
+void CppTSPalgorithm::ConnectBottomLeft()
+{
+    bool Run = true;
+    std::vector<Point*> TempList;
+    short int Rx;
+    short int Ry;
+    unsigned short int Rwidth;
+    unsigned short int Rheight;
+    while (Run)
+    {
+        TempList.clear();
+        Rx = Left[0]->X-1;
+        Ry = Left[0]->Y-1;
+        Rwidth = Bottom.back()->X - Rx;
+        Rheight = Bottom.back()->Y - Ry+1;
+        ParentNode->ContainArea(&TempList, Rx, Ry, Rwidth, Rheight);
+        Point* NextNode;
+        float SmallestGradient = 99999;
+        float TempGradient;
+        if (!TempList.empty())
+        {
+            for (int i = 0; i < TempList.size(); i++)
+            {
+                if (TempList[i] != Bottom.back())
+                {
+                    TempGradient = ((double)TempList[i]->Y - (double)Bottom.back()->Y) / ((double)TempList[i]->X - (double)Bottom.back()->X);
+                    if (TempGradient < SmallestGradient)
+                    {
+                        SmallestGradient = TempGradient;
+                        NextNode = TempList[i];
+                    }
+                }
+            }
+            if (NextNode == Left[0]) //That warning shouldn't be a problem
+                Run = false;
+            else
+                Bottom.push_back(NextNode);
+        }
+        else
+        {
+            Run = false;
+        }
+    }
+}
+void CppTSPalgorithm::ConnectLeftTop()
+{
+    bool Run = true;
+    std::vector<Point*> TempList;
+    short int Rx;
+    short int Ry;
+    unsigned short int Rwidth;
+    unsigned short int Rheight;
+    while (Run)
+    {
+        TempList.clear();
+        Rx = Left.back()->X-1;
+        Ry = Top[0]->Y-1;
+        Rwidth = Top[0]->X - Rx + 2;
+        Rheight = Left.back()->Y - Ry + 2;
+        ParentNode->ContainArea(&TempList, Rx, Ry, Rwidth, Rheight);
+        Point* NextNode;
+        float SmallestGradient = 999999;
+        float TempGradient;
+        if (!TempList.empty())
+        {
+            for (int i = 0; i < TempList.size(); i++)
+            {
+                if (TempList[i] != Left.back())
+                {
+                    TempGradient = ((double)TempList[i]->Y - (double)Left.back()->Y) / ((double)TempList[i]->X - (double)Left.back()->X);
+                    if (TempGradient < SmallestGradient)
+                    {
+                        SmallestGradient = TempGradient;
+                        NextNode = TempList[i];
+                    }
+                }
+            }
+            if (NextNode == Top[0]) //That warning shouldn't be a problem
+                Run = false;
+            else
+                Left.push_back(NextNode);
+        }
+        else
+        {
+            Run = false;
+        }
+    }
+}
+//Starts making the link towards the middle
+void CppTSPalgorithm::LogicMain()
+{
+    std::thread Worker[NumThreads];
+    int shortest = 0;
+    Points;
+    while (RouteSize != NumDots)
+    {
+        if (NumThreads != 1)
+        {
+            NextWidthHeight.clear();
+            NextWidthHeight.push_back(3604);
+            for (int i = 0; i < NumThreads; i++)
+            {
+                if (i != shortest)
+                {
+                    if (Distance[i] < NextWidthHeight[0])
+                        NextWidthHeight[0] = Distance[i];
+                }
+            }
+        }
+        else
+        {
+            if (NextWidthHeight.size() == 2)
+            {
+                NextWidthHeight.clear();
+                NextWidthHeight.push_back(3604);
+            }
+            else
+            {
+                double placehold=3604;
+                for (int i = 0; i < NextWidthHeight.size(); i++)
+                {
+                    if (NextWidthHeight[i] < placehold)
+                    {
+                        placehold = NextWidthHeight[i];
+                    }
+                }
+                NextWidthHeight[0] = placehold;
+            }
+        }
+        std::fill_n(Distance, NumThreads, NextWidthHeight[0]);
+        NextWidthHeight.clear();
+        NextWidthHeight.push_back(3604);
+        std::fill_n(DeltaDistance, NumThreads, 3604);
+        //std::fill_n(ThreadDone, NumThreads, false);
+        //Worker[0] = std::thread(&CppTSPalgorithm::LogicMethod, this, 0);
+        //Worker[0].join();
+        //ThreadsWaiting = false;
+        //if (Threadsrunning)
+        //{
+        //    bool checking = true;
+        //    while (checking)
+        //    {
+        //        checking = false;
+        //        for (int i = 0; i < NumThreads; i++)
+        //        {
+        //            if (!ThreadRestart[i])
+        //                checking = true;
+        //        }
+        //    }
+        //}
+        //ThreadsWaiting = true;
+        if (NumThreads == 1)
+        {
+            LogicMethod(0);
+        }
+        else
+        {
+            /*if (!Threadsrunning)
+            {
+                Threadsrunning = true;
+                for (int i = 0; i < NumThreads; i++)
+                {
+                    Worker[i] = std::thread(&CppTSPalgorithm::LogicMulti, this, i);
+                }
+            }
+            bool checking = false;
+            while (!checking)
+            {
+                std::this_thread::sleep_for(std::chrono::microseconds(5));
+                checking = true;
+                for (int i = 0; i < NumThreads; i++)
+                {
+                    if (!ThreadDone[i])
+                        checking = false;
+                }
+            }  */
+            for (int i = 0; i < NumThreads; i++)
+            {
+                Worker[i] = std::thread(&CppTSPalgorithm::LogicMethod, this, i);
+            }
+            for (int i = 0; i < NumThreads; i++)
+            {
+                Worker[i].join();
+            }
+            
+        }
+        shortest = 0;        
+        for (int i = 1; i < NumThreads; i++)
+        {
+            if (DeltaDistance[i] < DeltaDistance[shortest])
+            {                
+                shortest = i;
+            }
+        }        
+        ChoosenPoint[shortest]->NextPoint = ForwardPoint[shortest];
+        ChoosenPoint[shortest]->PreviousePoint = BackPoint[shortest];
+        BackPoint[shortest]->NextPoint = ChoosenPoint[shortest];
+        ForwardPoint[shortest]->PreviousePoint = ChoosenPoint[shortest];
+        ChoosenPoint[shortest]->Connected = true;
+        RouteSize++;        
+        //std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    //Threadsrunning = false;
+    //ThreadsWaiting = false;
+    //if (NumThreads != 1)
+    //{
+    //    for (int i = 0; i < NumThreads; i++)
+    //    {
+    //        Worker[i].join();
+    //    }
+    //}
+    Render = false;
+}
+void CppTSPalgorithm::LogicMethod(unsigned short int ThreadNum)
+{    
+    unsigned int i = ThreadNum;
+    std::vector<Point*> TempPoints;
+    Point* OtherPoint;
+    unsigned short int WidthHeight;
+    unsigned short int Offset;
+    while (i < NumDots)
+    {
+        bool Changed = false;
+        if (!Points[i].Connected)
+        {
+            TempPoints.clear();
+            TempPoints.reserve(NumDots);//probably overkill so optimize it later.
+            WidthHeight = Distance[ThreadNum]+20; // +20 is just some wigle room
+            Offset = WidthHeight / 2;
+            ParentNode->ContainArea(&TempPoints, Points[i].X - Offset, Points[i].Y - Offset, WidthHeight, WidthHeight);
+            for (int c = 0; c < TempPoints.size(); c++)
+            {
+                if (TempPoints[c]->Connected)
+                {
+                    double pointdistance = std::sqrt(std::pow(TempPoints[c]->X - Points[i].X,2) + std::pow(TempPoints[c]->Y - Points[i].Y, 2));
+                    OtherPoint = TempPoints[c]->PreviousePoint;
+                    double Distance2 = pointdistance + std::sqrt(std::pow(OtherPoint->X - Points[i].X,2) + std::pow(OtherPoint->Y - Points[i].Y,2));
+                    double TempDeltaDistance = Distance2 - std::sqrt(std::pow(OtherPoint->X - TempPoints[c]->X, 2) + std::pow(OtherPoint->Y - TempPoints[c]->Y, 2));
+                    //MyVector TargetPoint(Points[i].X, Points[i].Y, 0, 0);
+                    //MyVector TargetLine1(TempPoints[c]->X, TempPoints[c]->Y, OtherPoint->X - TempPoints[c]->X, OtherPoint->Y - TempPoints[c]->Y);
+                    //double distancetopoint = TargetLine1.DistanceToPoint(&TargetPoint);
+                    //Distance2 -= distancetopoint;
+                    if (TempDeltaDistance < DeltaDistance[ThreadNum])
+                    {           
+                        if (!Changed)
+                        {
+                            NextWidthHeight.push_back(Distance[ThreadNum]);
+                            Changed = true;
+                        }
+                        DeltaDistance[ThreadNum] = TempDeltaDistance;
+                        Distance[ThreadNum] = Distance2;
+                        ChoosenPoint[ThreadNum] = &Points[i];
+                        BackPoint[ThreadNum] = OtherPoint;
+                        ForwardPoint[ThreadNum] = TempPoints[c];
+                    }
+                    OtherPoint = TempPoints[c]->NextPoint;
+                    Distance2 = pointdistance + std::sqrt(std::pow(OtherPoint->X - Points[i].X,2) + std::pow(OtherPoint->Y - Points[i].Y,2));
+                    TempDeltaDistance = Distance2 - std::sqrt(std::pow(OtherPoint->X - TempPoints[c]->X, 2) + std::pow(OtherPoint->Y - TempPoints[c]->Y, 2));
+
+                    //MyVector TargetLine2(TempPoints[c]->X, TempPoints[c]->Y, OtherPoint->X - TempPoints[c]->X, OtherPoint->Y - TempPoints[c]->Y);
+                    //distancetopoint = TargetLine2.DistanceToPoint(&TargetPoint);
+                    //Distance2 -= distancetopoint;
+                    if (TempDeltaDistance < DeltaDistance[ThreadNum])
+                    {                        
+                        if (!Changed)
+                        {
+                            NextWidthHeight.push_back(Distance[ThreadNum]);
+                            Changed = true;
+                        }
+                        DeltaDistance[ThreadNum] = TempDeltaDistance;
+                        Distance[ThreadNum] = Distance2;
+                        ChoosenPoint[ThreadNum] = &Points[i];
+                        BackPoint[ThreadNum] = TempPoints[c];
+                        ForwardPoint[ThreadNum] = OtherPoint;
+                    }
+                }
+            }
+        }
+        i += NumThreads;
+    }
+}
+//void CppTSPalgorithm::LogicMulti(unsigned short int ThreadNum)
+//{
+//    while (Threadsrunning)
+//    {
+//        ThreadRestart[ThreadNum] = true;
+//        LogicMethod(ThreadNum);
+//        ThreadRestart[ThreadNum] = false;
+//        ThreadDone[ThreadNum] = true;
+//        std::this_thread::sleep_for(std::chrono::microseconds(10));
+//        while (ThreadsWaiting)
+//        {
+//            
+//        }
+//    }
+//    
+//}
