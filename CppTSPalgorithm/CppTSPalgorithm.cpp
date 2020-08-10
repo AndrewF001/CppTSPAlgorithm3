@@ -117,7 +117,13 @@ void CppTSPalgorithm::StartBtnClicked()
         std::thread LogicThread(&CppTSPalgorithm::LogicMain, this);
         UIUpdateMethod();
         LogicThread.join();
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        Render = true;
+        std::thread OverlapThread(&CppTSPalgorithm::OverlapMain, this);
+        UIUpdateMethod();
+        OverlapThread.join();
 
+        DebugMethod();
         AddedDots = false;
         ProgramRunning = false;
         UpdateTimers();
@@ -743,6 +749,8 @@ void CppTSPalgorithm::LogicMain()
         ForwardPoint[shortest]->PreviousePoint = ChoosenPoint[shortest];
         ChoosenPoint[shortest]->Connected = true;
         RouteSize++;        
+        if (Distance[shortest] > LongestConnection)
+            LongestConnection = Distance[shortest];
         //std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     //Threadsrunning = false;
@@ -840,3 +848,116 @@ void CppTSPalgorithm::LogicMethod(unsigned short int ThreadNum)
 //    }
 //    
 //}
+
+void CppTSPalgorithm::OverlapMain()
+{
+    LongestConnection += 4;
+    if (NumThreads == 1)
+        OverlapMethod(0);
+    else
+    {
+        std::thread Worker[NumThreads];
+        for (int i = 0; i < NumThreads; i++)
+        {
+            Worker[i] = std::thread(&CppTSPalgorithm::OverlapMethod, this, i);
+        }
+        for (int i = 0; i < NumThreads; i++)
+        {
+            Worker[i].join();
+        }
+    }
+    Render = false;
+}
+
+void CppTSPalgorithm::OverlapMethod(int ThreadNum)
+{
+    int i = ThreadNum;
+    Point* CurrentNode = &Points[i];
+    while (i < NumDots)
+    {
+        std::vector<Point*> TempPoints;
+        ParentNode->ContainArea(&TempPoints, CurrentNode->X - LongestConnection, CurrentNode->Y - LongestConnection, LongestConnection*2, LongestConnection*2);
+        for (int c = 0; c < TempPoints.size(); c++)
+        {
+            if (TempPoints[c] != CurrentNode && TempPoints[c] != CurrentNode->NextPoint && TempPoints[c]->NextPoint != CurrentNode)
+            {
+                if (OverlapCheck(CurrentNode, CurrentNode->NextPoint, TempPoints[c], TempPoints[c]->NextPoint))
+                {
+                    Point P1 = *CurrentNode;
+                    Point P2 = *CurrentNode->NextPoint;
+                    Point Q1 = *TempPoints[c];
+                    Point Q2 = *TempPoints[c]->NextPoint;
+
+                    Q2.PreviousePoint = CurrentNode->NextPoint;
+                    P2.PreviousePoint = CurrentNode->NextPoint->NextPoint;
+                    P2.NextPoint = TempPoints[c]->NextPoint;
+                    Q1.NextPoint = TempPoints[c]->PreviousePoint;
+                    Q1.PreviousePoint = CurrentNode;
+                    P1.NextPoint = TempPoints[c];
+
+                    *TempPoints[c]->NextPoint = Q2;
+                    *CurrentNode->NextPoint = P2;
+                    *TempPoints[c] = Q1;
+                    *CurrentNode = P1;
+                    std::this_thread::sleep_for(std::chrono::seconds(5));
+                    c = TempPoints.size();
+
+                }
+            }
+            //else if(OverlapCheck(&Points[i], Points[i].NextPoint, TempPoints[c], TempPoints[c]->PreviousePoint))
+            //{
+            //    
+            //    c = TempPoints.size();
+            //}
+        }
+        for (int c = 0; c < NumThreads; c++)
+        {
+            CurrentNode = CurrentNode->NextPoint;
+        }
+        i += NumThreads;
+    }
+    
+}
+
+bool CppTSPalgorithm::OverlapCheck(Point* P1, Point* P2, Point* Q1, Point* Q2)
+{
+    VectorClass Tvector(Q1->X - P1->X, Q1->Y - P1->Y);
+    //VectorClass Uvector(P1->X - Q1->X, P1->Y - Q1->Y);
+    VectorClass Rvector(P2->X - P1->X, P2->Y - P1->Y);
+    VectorClass Svector(Q2->X - Q1->X, Q2->Y - Q1->Y);
+    double RxS = Crossproduct(&Rvector, &Svector);
+    if (RxS != 0)
+    {
+        double t = Crossproduct(&Tvector, &Svector) / RxS;
+        double u = Crossproduct(&Tvector, &Rvector) / RxS;
+        if (t <= 1 && t >= 0 && u <= 1 && u >= 0)
+            return true;
+    }
+    return false;
+}
+
+double CppTSPalgorithm::Crossproduct(VectorClass* P1, VectorClass* Q1 )
+{
+    return  P1->X * Q1->Y - P1->Y * Q1->X;
+}
+
+bool CppTSPalgorithm::Opt2(Point* P1, Point* P2, Point* Q1, Point* Q2)
+{
+    double Change1 = std::sqrt(std::pow(P2->X - Q1->X, 2) + std::pow(P2->Y - Q1->Y, 2)) + std::sqrt(std::pow(P1->X - Q2->X, 2) + std::pow(P1->Y - Q2->Y, 2));
+    double Change2 = std::sqrt(std::pow(P2->X - Q2->X, 2) + std::pow(P2->Y - Q2->Y, 2)) + std::sqrt(std::pow(P1->X - Q1->X, 2) + std::pow(P1->Y - Q1->Y, 2));
+    if (Change2 < Change1)
+        return true;
+    else
+        return false;
+}
+
+void CppTSPalgorithm::DebugMethod()
+{
+    Point* Currentnode = &Points[0];
+    for (int i = 0; i < NumDots; i++)
+    {
+        Currentnode = Currentnode->NextPoint;
+    }
+    if (Currentnode == &Points[0])
+        Points[0];
+}

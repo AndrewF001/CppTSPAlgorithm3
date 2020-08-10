@@ -5,6 +5,7 @@
 #include "Point.h"
 #include "MyTimer.h"
 #include "QuadTree.h"
+#include "VectorClass.h"
 
 class CppTSPalgorithm : public QMainWindow
 {
@@ -46,8 +47,13 @@ private:
     void ConnectBottomLeft();
     void ConnectLeftTop();
     void LogicMain();
-    void LogicMethod(unsigned short int ThreadNum);
-    void Test();
+    void LogicMethod(unsigned short int);
+    void OverlapMain();
+    void OverlapMethod(int);
+    bool OverlapCheck(Point*, Point*, Point*, Point*);
+    double Crossproduct( VectorClass*, VectorClass*);
+    bool Opt2(Point*, Point*, Point*, Point*);
+    void DebugMethod();
     //void LogicMulti(unsigned short int ThreadNum);
 
 
@@ -83,6 +89,8 @@ private:
     std::vector<double> NextWidthHeight = { 3604 };    
     Point* BackPoint[NumThreads];
     Point* ForwardPoint[NumThreads];
+
+    double LongestConnection = 0;
 
     MyTimer Timer;
 

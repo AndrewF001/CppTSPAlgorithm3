@@ -1,9 +1,5 @@
-﻿  MyTimer.cpp
-  MyVector.cpp
-  Point.cpp
-  QuadTree.cpp
+﻿  moc CppTSPalgorithm.h
   CppTSPalgorithm.cpp
+  QuadTree.cpp
   main.cpp
-  qrc_CppTSPalgorithm.cpp
-  moc_CppTSPalgorithm.cpp
-  CppTSPalgorithm.vcxproj -> C:\Users\andre\Documents\GitHub\CppTSPAlgorithm3\x64\Release\CppTSPalgorithm.exe
+C:\Users\andre\Documents\GitHub\CppTSPAlgorithm3\CppTSPalgorithm\CppTSPalgorithm.cpp(896): error C4716: 'CppTSPalgorithm::OverlapCheck': must return a value
