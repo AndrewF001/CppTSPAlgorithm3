@@ -53,7 +53,7 @@ private:
     bool OverlapCheck(Point*, Point*, Point*, Point*);
     double Crossproduct( VectorClass*, VectorClass*);
     bool Opt2(Point*, Point*, Point*, Point*);
-    void DebugMethod();
+    bool DebugMethod();
     //void LogicMulti(unsigned short int ThreadNum);
 
 

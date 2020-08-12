@@ -118,10 +118,10 @@ void CppTSPalgorithm::StartBtnClicked()
         UIUpdateMethod();
         LogicThread.join();
         //std::this_thread::sleep_for(std::chrono::seconds(5));
-        //Render = true;
-        //std::thread OverlapThread(&CppTSPalgorithm::OverlapMain, this);
-        //UIUpdateMethod();
-        //OverlapThread.join();
+        Render = true;
+        std::thread OverlapThread(&CppTSPalgorithm::OverlapMain, this);
+        UIUpdateMethod();
+        OverlapThread.join();
 
         DebugMethod();
         AddedDots = false;
@@ -906,7 +906,7 @@ void CppTSPalgorithm::OverlapMethod(int ThreadNum)
                         Point* hold = ChangePoint->NextPoint;
                         ChangePoint->NextPoint = ChangePoint->PreviousePoint;
                         ChangePoint->PreviousePoint = hold;
-                        ChangePoint = ChangePoint->NextPoint;
+                        ChangePoint = hold;
                         w += 1;
                     }
                     //std::this_thread::sleep_for(std::chrono::seconds(5));
@@ -914,11 +914,6 @@ void CppTSPalgorithm::OverlapMethod(int ThreadNum)
                     i -= 1;
                 }
             }
-            //else if(OverlapCheck(&Points[i], Points[i].NextPoint, TempPoints[c], TempPoints[c]->PreviousePoint))
-            //{
-            //    
-            //    c = TempPoints.size();
-            //}
         }
         for (int c = 0; c < NumThreads; c++)
         {
@@ -961,7 +956,7 @@ bool CppTSPalgorithm::Opt2(Point* P1, Point* P2, Point* Q1, Point* Q2)
         return false;
 }
 
-void CppTSPalgorithm::DebugMethod()
+bool CppTSPalgorithm::DebugMethod()
 {
     Point* Currentnode = &Points[0];
     for (int i = 0; i < NumDots; i++)
@@ -969,5 +964,6 @@ void CppTSPalgorithm::DebugMethod()
         Currentnode = Currentnode->NextPoint;
     }
     if (Currentnode == &Points[0])
-        Points[0];
+        return true;
+    return false;
 }
