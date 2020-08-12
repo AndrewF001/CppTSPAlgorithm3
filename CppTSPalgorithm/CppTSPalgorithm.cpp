@@ -118,10 +118,10 @@ void CppTSPalgorithm::StartBtnClicked()
         UIUpdateMethod();
         LogicThread.join();
         //std::this_thread::sleep_for(std::chrono::seconds(5));
-        Render = true;
-        std::thread OverlapThread(&CppTSPalgorithm::OverlapMain, this);
-        UIUpdateMethod();
-        OverlapThread.join();
+        //Render = true;
+        //std::thread OverlapThread(&CppTSPalgorithm::OverlapMain, this);
+        //UIUpdateMethod();
+        //OverlapThread.join();
 
         DebugMethod();
         AddedDots = false;
