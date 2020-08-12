@@ -1,5 +1,0 @@
-﻿  moc CppTSPalgorithm.h
-  CppTSPalgorithm.cpp
-  QuadTree.cpp
-  main.cpp
-C:\Users\andre\Documents\GitHub\CppTSPAlgorithm3\CppTSPalgorithm\CppTSPalgorithm.cpp(896): error C4716: 'CppTSPalgorithm::OverlapCheck': must return a value
