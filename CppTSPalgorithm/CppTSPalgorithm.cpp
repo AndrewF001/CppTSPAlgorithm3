@@ -123,7 +123,6 @@ void CppTSPalgorithm::StartBtnClicked()
         UIUpdateMethod();
         OverlapThread.join();
 
-        DebugMethod();
         AddedDots = false;
         ProgramRunning = false;
         UpdateTimers();
@@ -868,62 +867,65 @@ void CppTSPalgorithm::OverlapMain()
     }
     Render = false;
 }
-
 void CppTSPalgorithm::OverlapMethod(int ThreadNum)
 {
     int i = ThreadNum;
     Point* CurrentNode = &Points[i];
-    while (i < NumDots)
+    bool MadeChanges = true;
+    while(MadeChanges)
     {
-        std::vector<Point*> TempPoints;
-        ParentNode->ContainArea(&TempPoints, CurrentNode->X - LongestConnection, CurrentNode->Y - LongestConnection, LongestConnection*2, LongestConnection*2);
-        for (int c = 0; c < TempPoints.size(); c++)
+        MadeChanges = false;
+        while (i < NumDots)
         {
-            if (TempPoints[c] != CurrentNode && TempPoints[c] != CurrentNode->NextPoint && TempPoints[c]->NextPoint != CurrentNode)
+            std::vector<Point*> TempPoints;
+            ParentNode->ContainArea(&TempPoints, CurrentNode->X - LongestConnection, CurrentNode->Y - LongestConnection, LongestConnection * 2, LongestConnection * 2);
+            for (int c = 0; c < TempPoints.size(); c++)
             {
-                if (OverlapCheck(CurrentNode, CurrentNode->NextPoint, TempPoints[c], TempPoints[c]->NextPoint))
+                if (TempPoints[c] != CurrentNode && TempPoints[c] != CurrentNode->NextPoint && TempPoints[c]->NextPoint != CurrentNode)
                 {
-                    Point P1 = *CurrentNode;
-                    Point P2 = *CurrentNode->NextPoint;
-                    Point Q1 = *TempPoints[c];
-                    Point Q2 = *TempPoints[c]->NextPoint;
-                    Point* ChangePoint = CurrentNode->NextPoint->NextPoint;
-
-                    Q2.PreviousePoint = CurrentNode->NextPoint;
-                    P2.PreviousePoint = CurrentNode->NextPoint->NextPoint;
-                    P2.NextPoint = TempPoints[c]->NextPoint;
-                    Q1.NextPoint = TempPoints[c]->PreviousePoint;
-                    Q1.PreviousePoint = CurrentNode;
-                    P1.NextPoint = TempPoints[c];
-
-                    *TempPoints[c]->NextPoint = Q2;
-                    *CurrentNode->NextPoint = P2;
-                    *TempPoints[c] = Q1;
-                    *CurrentNode = P1;
-                    int w = 0;
-                    while (ChangePoint != CurrentNode->NextPoint)
+                    if (OverlapCheck(CurrentNode, CurrentNode->NextPoint, TempPoints[c], TempPoints[c]->NextPoint))
                     {
-                        Point* hold = ChangePoint->NextPoint;
-                        ChangePoint->NextPoint = ChangePoint->PreviousePoint;
-                        ChangePoint->PreviousePoint = hold;
-                        ChangePoint = hold;
-                        w += 1;
+                        MadeChanges = true;
+                        Point P1 = *CurrentNode;
+                        Point P2 = *CurrentNode->NextPoint;
+                        Point Q1 = *TempPoints[c];
+                        Point Q2 = *TempPoints[c]->NextPoint;
+                        Point* ChangePoint = CurrentNode->NextPoint->NextPoint;
+
+                        Q2.PreviousePoint = CurrentNode->NextPoint;
+                        P2.PreviousePoint = CurrentNode->NextPoint->NextPoint;
+                        P2.NextPoint = TempPoints[c]->NextPoint;
+                        Q1.NextPoint = TempPoints[c]->PreviousePoint;
+                        Q1.PreviousePoint = CurrentNode;
+                        P1.NextPoint = TempPoints[c];
+
+                        *TempPoints[c]->NextPoint = Q2;
+                        *CurrentNode->NextPoint = P2;
+                        *TempPoints[c] = Q1;
+                        *CurrentNode = P1;
+                        while (ChangePoint != CurrentNode->NextPoint)
+                        {
+                            Point* hold = ChangePoint->NextPoint;
+                            ChangePoint->NextPoint = ChangePoint->PreviousePoint;
+                            ChangePoint->PreviousePoint = hold;
+                            ChangePoint = hold;
+                        }
+                        //std::this_thread::sleep_for(std::chrono::seconds(5));
+                        c = TempPoints.size();
+                        i -= 1;
                     }
-                    //std::this_thread::sleep_for(std::chrono::seconds(5));
-                    c = TempPoints.size();
-                    i -= 1;
                 }
             }
+
+            for (int c = 0; c < NumThreads; c++)
+            {
+                CurrentNode = CurrentNode->NextPoint;
+            }
+            i += NumThreads;
         }
-        for (int c = 0; c < NumThreads; c++)
-        {
-            CurrentNode = CurrentNode->NextPoint;
-        }
-        i += NumThreads;
     }
     
 }
-
 bool CppTSPalgorithm::OverlapCheck(Point* P1, Point* P2, Point* Q1, Point* Q2)
 {
     VectorClass Tvector(Q1->X - P1->X, Q1->Y - P1->Y);
@@ -940,12 +942,10 @@ bool CppTSPalgorithm::OverlapCheck(Point* P1, Point* P2, Point* Q1, Point* Q2)
     }
     return false;
 }
-
 double CppTSPalgorithm::Crossproduct(VectorClass* P1, VectorClass* Q1 )
 {
     return  P1->X * Q1->Y - P1->Y * Q1->X;
 }
-
 bool CppTSPalgorithm::Opt2(Point* P1, Point* P2, Point* Q1, Point* Q2)
 {
     double Change1 = std::sqrt(std::pow(P2->X - Q1->X, 2) + std::pow(P2->Y - Q1->Y, 2)) + std::sqrt(std::pow(P1->X - Q2->X, 2) + std::pow(P1->Y - Q2->Y, 2));
@@ -954,16 +954,4 @@ bool CppTSPalgorithm::Opt2(Point* P1, Point* P2, Point* Q1, Point* Q2)
         return true;
     else
         return false;
-}
-
-bool CppTSPalgorithm::DebugMethod()
-{
-    Point* Currentnode = &Points[0];
-    for (int i = 0; i < NumDots; i++)
-    {
-        Currentnode = Currentnode->NextPoint;
-    }
-    if (Currentnode == &Points[0])
-        return true;
-    return false;
 }
