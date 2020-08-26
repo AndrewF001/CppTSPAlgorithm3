@@ -4,11 +4,19 @@
 #include <math.h>
 #include <iostream>
 #include "MyVector.h"
+#include "omp.h"
+
 
 //constructor, just links all the UI elements to their EventHandler slot
 CppTSPalgorithm::CppTSPalgorithm(QWidget *parent)
     : QMainWindow(parent)
 {
+    CppTSPalgorithm::NumThreads = (int)omp_get_max_threads-1;
+    ChoosenPoint.resize(NumThreads);
+    Distance.resize(NumThreads);
+    DeltaDistance.resize(NumThreads);
+    BackPoint.resize(NumThreads);
+    ForwardPoint.resize(NumThreads);
     ui.setupUi(this);
     //connects UI event handlers to their methods
     connect(ui.StartBtn, SIGNAL(clicked()), this, SLOT(StartBtnClicked()));
@@ -215,13 +223,13 @@ void CppTSPalgorithm::CreatePoints()
 }
 void CppTSPalgorithm::ResetVaraibles()
 {
+    RouteSize = 0;
     Points.clear();
     delete(ParentNode);
     Top.clear();
     Right.clear();
     Bottom.clear();
     Left.clear();
-    RouteSize = 0;
     NextWidthHeight.clear();
     NextWidthHeight.push_back(3604);
     std::fill_n(Distance, NumThreads, 3604);
@@ -639,7 +647,7 @@ void CppTSPalgorithm::ConnectLeftTop()
 //Starts making the link towards the middle
 void CppTSPalgorithm::LogicMain()
 {
-    std::thread Worker[NumThreads];
+    //std::thread Worker[NumThreads];
     int shortest = 0;
     Points;
     while (RouteSize != NumDots)
@@ -681,58 +689,28 @@ void CppTSPalgorithm::LogicMain()
         NextWidthHeight.clear();
         NextWidthHeight.push_back(3604);
         std::fill_n(DeltaDistance, NumThreads, 3604);
-        //std::fill_n(ThreadDone, NumThreads, false);
-        //Worker[0] = std::thread(&CppTSPalgorithm::LogicMethod, this, 0);
-        //Worker[0].join();
-        //ThreadsWaiting = false;
-        //if (Threadsrunning)
-        //{
-        //    bool checking = true;
-        //    while (checking)
-        //    {
-        //        checking = false;
-        //        for (int i = 0; i < NumThreads; i++)
-        //        {
-        //            if (!ThreadRestart[i])
-        //                checking = true;
-        //        }
-        //    }
-        //}
-        //ThreadsWaiting = true;
-        if (NumThreads == 1)
+        if (NumThreads<2)
         {
             LogicMethod(0);
         }
         else
         {
-            /*if (!Threadsrunning)
-            {
-                Threadsrunning = true;
-                for (int i = 0; i < NumThreads; i++)
+            omp_set_num_threads(NumThreads);
+#pragma omp parallel
                 {
-                    Worker[i] = std::thread(&CppTSPalgorithm::LogicMulti, this, i);
+                    int ID = omp_get_thread_num();
+                    LogicMethod(ID);
                 }
-            }
-            bool checking = false;
-            while (!checking)
-            {
-                std::this_thread::sleep_for(std::chrono::microseconds(5));
-                checking = true;
-                for (int i = 0; i < NumThreads; i++)
-                {
-                    if (!ThreadDone[i])
-                        checking = false;
-                }
-            }  */
-            for (int i = 0; i < NumThreads; i++)
+            
+/*            for (int i = 0; i < NumThreads; i++)
             {
                 Worker[i] = std::thread(&CppTSPalgorithm::LogicMethod, this, i);
             }
             for (int i = 0; i < NumThreads; i++)
             {
-                Worker[i].join();
-            }
-            
+                if(Worker[i].joinable())
+                    Worker[i].join();
+            }   */         
         }
         shortest = 0;        
         for (int i = 1; i < NumThreads; i++)
@@ -752,15 +730,6 @@ void CppTSPalgorithm::LogicMain()
             LongestConnection = Distance[shortest];
         //std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-    //Threadsrunning = false;
-    //ThreadsWaiting = false;
-    //if (NumThreads != 1)
-    //{
-    //    for (int i = 0; i < NumThreads; i++)
-    //    {
-    //        Worker[i].join();
-    //    }
-    //}
     Render = false;
 }
 void CppTSPalgorithm::LogicMethod(unsigned short int ThreadNum)
@@ -788,10 +757,6 @@ void CppTSPalgorithm::LogicMethod(unsigned short int ThreadNum)
                     OtherPoint = TempPoints[c]->PreviousePoint;
                     double Distance2 = pointdistance + std::sqrt(std::pow(OtherPoint->X - Points[i].X,2) + std::pow(OtherPoint->Y - Points[i].Y,2));
                     double TempDeltaDistance = Distance2 - std::sqrt(std::pow(OtherPoint->X - TempPoints[c]->X, 2) + std::pow(OtherPoint->Y - TempPoints[c]->Y, 2));
-                    //MyVector TargetPoint(Points[i].X, Points[i].Y, 0, 0);
-                    //MyVector TargetLine1(TempPoints[c]->X, TempPoints[c]->Y, OtherPoint->X - TempPoints[c]->X, OtherPoint->Y - TempPoints[c]->Y);
-                    //double distancetopoint = TargetLine1.DistanceToPoint(&TargetPoint);
-                    //Distance2 -= distancetopoint;
                     if (TempDeltaDistance < DeltaDistance[ThreadNum])
                     {           
                         if (!Changed)
@@ -808,10 +773,6 @@ void CppTSPalgorithm::LogicMethod(unsigned short int ThreadNum)
                     OtherPoint = TempPoints[c]->NextPoint;
                     Distance2 = pointdistance + std::sqrt(std::pow(OtherPoint->X - Points[i].X,2) + std::pow(OtherPoint->Y - Points[i].Y,2));
                     TempDeltaDistance = Distance2 - std::sqrt(std::pow(OtherPoint->X - TempPoints[c]->X, 2) + std::pow(OtherPoint->Y - TempPoints[c]->Y, 2));
-
-                    //MyVector TargetLine2(TempPoints[c]->X, TempPoints[c]->Y, OtherPoint->X - TempPoints[c]->X, OtherPoint->Y - TempPoints[c]->Y);
-                    //distancetopoint = TargetLine2.DistanceToPoint(&TargetPoint);
-                    //Distance2 -= distancetopoint;
                     if (TempDeltaDistance < DeltaDistance[ThreadNum])
                     {                        
                         if (!Changed)
@@ -855,7 +816,8 @@ void CppTSPalgorithm::OverlapMain()
         OverlapMethod(0);
     else
     {
-        std::thread Worker[NumThreads];
+        std::vector<std::thread> Worker;
+        Worker.resize(NumThreads);
         for (int i = 0; i < NumThreads; i++)
         {
             Worker[i] = std::thread(&CppTSPalgorithm::OverlapMethod, this, i);
@@ -955,3 +917,4 @@ bool CppTSPalgorithm::Opt2(Point* P1, Point* P2, Point* Q1, Point* Q2)
     else
         return false;
 }
+
