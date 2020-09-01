@@ -6,6 +6,7 @@
 #include "MyTimer.h"
 #include "QuadTree.h"
 #include "VectorClass.h"
+#include "omp.h"
 
 class CppTSPalgorithm : public QMainWindow
 {
@@ -75,19 +76,13 @@ private:
     Point* StartNode = nullptr;
     int RouteSize = 0;
 
-    static const int NumThreads = 1;
-
-
-    Point* ChoosenPoint[NumThreads];
-    double Distance[NumThreads];
-    double DeltaDistance[NumThreads];
-    //bool ThreadDone[NumThreads];
-    //bool ThreadRestart[NumThreads];
-    //bool Threadsrunning = false;
-    //bool ThreadsWaiting = true;
+    static int NumThreads;
+    std::vector<Point*> ChoosenPoint;
+    std::vector<double> Distance;
+    std::vector<double> DeltaDistance;
     std::vector<double> NextWidthHeight = { 3604 };    
-    Point* BackPoint[NumThreads];
-    Point* ForwardPoint[NumThreads];
+    std::vector<Point*> BackPoint;
+    std::vector<Point*> ForwardPoint;
 
     double LongestConnection = 0;
 
