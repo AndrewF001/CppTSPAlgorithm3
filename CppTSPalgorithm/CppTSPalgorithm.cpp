@@ -9,9 +9,8 @@
 
 //constructor, just links all the UI elements to their EventHandler slot
 CppTSPalgorithm::CppTSPalgorithm(QWidget *parent)
-    : QMainWindow(parent)
+    : QMainWindow(parent), NumThreads(omp_get_max_threads())
 {
-    CppTSPalgorithm::NumThreads = (int)omp_get_max_threads-1;
     ChoosenPoint.resize(NumThreads);
     Distance.resize(NumThreads);
     DeltaDistance.resize(NumThreads);
@@ -120,8 +119,9 @@ void CppTSPalgorithm::StartBtnClicked()
         ConnectThread.join();
         //Makes the link towards to middle
         Render = true;
-        std::fill_n(Distance, NumThreads, 3604);
-        std::fill_n(DeltaDistance, NumThreads, 3604);
+        fill(Distance.begin(), Distance.end(), 3604);
+        fill(DeltaDistance.begin(), DeltaDistance.end(), 3604);
+
         std::thread LogicThread(&CppTSPalgorithm::LogicMain, this);
         UIUpdateMethod();
         LogicThread.join();
@@ -232,8 +232,8 @@ void CppTSPalgorithm::ResetVaraibles()
     Left.clear();
     NextWidthHeight.clear();
     NextWidthHeight.push_back(3604);
-    std::fill_n(Distance, NumThreads, 3604);
-    std::fill_n(DeltaDistance, NumThreads, 3604);   
+    fill(Distance.begin(), Distance.end(), 3604);
+    fill(DeltaDistance.begin(), DeltaDistance.end(), 3604);
 }
 //Quad tree creation methods
 void CppTSPalgorithm::CreateQuadTreeMain()
@@ -685,33 +685,23 @@ void CppTSPalgorithm::LogicMain()
                 NextWidthHeight[0] = placehold;
             }
         }
-        std::fill_n(Distance, NumThreads, NextWidthHeight[0]);
+        fill(Distance.begin(), Distance.end(), 3604);
         NextWidthHeight.clear();
         NextWidthHeight.push_back(3604);
-        std::fill_n(DeltaDistance, NumThreads, 3604);
-        if (NumThreads<2)
-        {
+        fill(DeltaDistance.begin(), DeltaDistance.end(), 3604);
+        //if (NumThreads<2)
+        //{
             LogicMethod(0);
-        }
-        else
-        {
-            omp_set_num_threads(NumThreads);
-#pragma omp parallel
-                {
-                    int ID = omp_get_thread_num();
-                    LogicMethod(ID);
-                }
-            
-/*            for (int i = 0; i < NumThreads; i++)
-            {
-                Worker[i] = std::thread(&CppTSPalgorithm::LogicMethod, this, i);
-            }
-            for (int i = 0; i < NumThreads; i++)
-            {
-                if(Worker[i].joinable())
-                    Worker[i].join();
-            }   */         
-        }
+        //}
+//        else
+//        {
+//            omp_set_num_threads(NumThreads);
+//#pragma omp parallel
+//                {
+//                    int ID = omp_get_thread_num();
+//                    LogicMethod(ID);
+//                }    
+//        }
         shortest = 0;        
         for (int i = 1; i < NumThreads; i++)
         {
@@ -792,22 +782,6 @@ void CppTSPalgorithm::LogicMethod(unsigned short int ThreadNum)
         i += NumThreads;
     }
 }
-//void CppTSPalgorithm::LogicMulti(unsigned short int ThreadNum)
-//{
-//    while (Threadsrunning)
-//    {
-//        ThreadRestart[ThreadNum] = true;
-//        LogicMethod(ThreadNum);
-//        ThreadRestart[ThreadNum] = false;
-//        ThreadDone[ThreadNum] = true;
-//        std::this_thread::sleep_for(std::chrono::microseconds(10));
-//        while (ThreadsWaiting)
-//        {
-//            
-//        }
-//    }
-//    
-//}
 
 void CppTSPalgorithm::OverlapMain()
 {

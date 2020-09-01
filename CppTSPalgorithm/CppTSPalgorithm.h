@@ -76,7 +76,7 @@ private:
     Point* StartNode = nullptr;
     int RouteSize = 0;
 
-    static int NumThreads;
+    const int NumThreads;
     std::vector<Point*> ChoosenPoint;
     std::vector<double> Distance;
     std::vector<double> DeltaDistance;
