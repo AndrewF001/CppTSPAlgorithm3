@@ -689,19 +689,21 @@ void CppTSPalgorithm::LogicMain()
         NextWidthHeight.clear();
         NextWidthHeight.push_back(3604);
         fill(DeltaDistance.begin(), DeltaDistance.end(), 3604);
-        //if (NumThreads<2)
-        //{
-            LogicMethod(0);
-        //}
-//        else
-//        {
-//            omp_set_num_threads(NumThreads);
-//#pragma omp parallel
-//                {
-//                    int ID = omp_get_thread_num();
-//                    LogicMethod(ID);
-//                }    
-//        }
+        if (NumThreads<2)
+        {
+            LogicMethodSingle();
+        }
+        else
+        {
+            omp_set_num_threads(NumThreads);
+#pragma omp parallel for
+                for (int i = 0; i < NumDots; i++)
+                {
+                     int ID = omp_get_thread_num();
+                     if(!Points[i].Connected)
+                        LogicMethodMulti(i,ID,Distance[0]+20,&Points[i],Points[i],Distance[ID],DeltaDistance[ID]);
+                }
+        }
         shortest = 0;        
         for (int i = 1; i < NumThreads; i++)
         {
@@ -718,13 +720,12 @@ void CppTSPalgorithm::LogicMain()
         RouteSize++;        
         if (Distance[shortest] > LongestConnection)
             LongestConnection = Distance[shortest];
-        //std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     Render = false;
 }
-void CppTSPalgorithm::LogicMethod(unsigned short int ThreadNum)
+void CppTSPalgorithm::LogicMethodSingle()
 {    
-    unsigned int i = ThreadNum;
+    unsigned int i = 0;
     std::vector<Point*> TempPoints;
     Point* OtherPoint;
     unsigned short int WidthHeight;
@@ -736,7 +737,7 @@ void CppTSPalgorithm::LogicMethod(unsigned short int ThreadNum)
         {
             TempPoints.clear();
             TempPoints.reserve(NumDots);//probably overkill so optimize it later.
-            WidthHeight = Distance[ThreadNum]+20; // +20 is just some wigle room
+            WidthHeight = Distance[0]+20; // +20 is just some wigle room
             Offset = WidthHeight / 2;
             ParentNode->ContainArea(&TempPoints, Points[i].X - Offset, Points[i].Y - Offset, WidthHeight, WidthHeight);
             for (int c = 0; c < TempPoints.size(); c++)
@@ -747,42 +748,100 @@ void CppTSPalgorithm::LogicMethod(unsigned short int ThreadNum)
                     OtherPoint = TempPoints[c]->PreviousePoint;
                     double Distance2 = pointdistance + std::sqrt(std::pow(OtherPoint->X - Points[i].X,2) + std::pow(OtherPoint->Y - Points[i].Y,2));
                     double TempDeltaDistance = Distance2 - std::sqrt(std::pow(OtherPoint->X - TempPoints[c]->X, 2) + std::pow(OtherPoint->Y - TempPoints[c]->Y, 2));
-                    if (TempDeltaDistance < DeltaDistance[ThreadNum])
+                    if (TempDeltaDistance < DeltaDistance[0])
                     {           
                         if (!Changed)
                         {
-                            NextWidthHeight.push_back(Distance[ThreadNum]);
+                            NextWidthHeight.push_back(Distance[0]);
                             Changed = true;
                         }
-                        DeltaDistance[ThreadNum] = TempDeltaDistance;
-                        Distance[ThreadNum] = Distance2;
-                        ChoosenPoint[ThreadNum] = &Points[i];
-                        BackPoint[ThreadNum] = OtherPoint;
-                        ForwardPoint[ThreadNum] = TempPoints[c];
+                        DeltaDistance[0] = TempDeltaDistance;
+                        Distance[0] = Distance2;
+                        ChoosenPoint[0] = &Points[i];
+                        BackPoint[0] = OtherPoint;
+                        ForwardPoint[0] = TempPoints[c];
                     }
                     OtherPoint = TempPoints[c]->NextPoint;
                     Distance2 = pointdistance + std::sqrt(std::pow(OtherPoint->X - Points[i].X,2) + std::pow(OtherPoint->Y - Points[i].Y,2));
                     TempDeltaDistance = Distance2 - std::sqrt(std::pow(OtherPoint->X - TempPoints[c]->X, 2) + std::pow(OtherPoint->Y - TempPoints[c]->Y, 2));
-                    if (TempDeltaDistance < DeltaDistance[ThreadNum])
+                    if (TempDeltaDistance < DeltaDistance[0])
                     {                        
                         if (!Changed)
                         {
-                            NextWidthHeight.push_back(Distance[ThreadNum]);
+                            NextWidthHeight.push_back(Distance[0]);
                             Changed = true;
                         }
-                        DeltaDistance[ThreadNum] = TempDeltaDistance;
-                        Distance[ThreadNum] = Distance2;
-                        ChoosenPoint[ThreadNum] = &Points[i];
-                        BackPoint[ThreadNum] = TempPoints[c];
-                        ForwardPoint[ThreadNum] = OtherPoint;
+                        DeltaDistance[0] = TempDeltaDistance;
+                        Distance[0] = Distance2;
+                        ChoosenPoint[0] = &Points[i];
+                        BackPoint[0] = TempPoints[c];
+                        ForwardPoint[0] = OtherPoint;
                     }
                 }
             }
         }
-        i += NumThreads;
+        i ++;
     }
 }
 
+void CppTSPalgorithm::LogicMethodMulti(int Place, int ThreadID, int Size, Point *CurrentPointP,Point CurrentPoint, double ThreadDistance, double ThreadDeltaDistance)
+{
+    std::vector<Point*> TempPoints;
+    Point* OtherPoint;
+    unsigned short int WidthHeight = Size;
+    unsigned short int Offset = WidthHeight / 2;
+    bool Changed = false;
+    Point* ThreadChoosenPoint, * ThreadBackpoint, *ThreadForwarpPoint;
+    TempPoints.reserve(NumDots);//probably overkill so optimize it later.            
+    ParentNode->ContainArea(&TempPoints, CurrentPoint.X - Offset, CurrentPoint.Y - Offset, WidthHeight, WidthHeight);
+    for (int c = 0; c < TempPoints.size(); c++)
+    {
+         if (TempPoints[c]->Connected)
+         {
+              double pointdistance = std::sqrt(std::pow(TempPoints[c]->X - CurrentPoint.X, 2) + std::pow(TempPoints[c]->Y - CurrentPoint.Y, 2));
+              OtherPoint = TempPoints[c]->PreviousePoint;
+              double Distance2 = pointdistance + std::sqrt(std::pow(OtherPoint->X - CurrentPoint.X, 2) + std::pow(OtherPoint->Y - CurrentPoint.Y, 2));
+              double TempDeltaDistance = Distance2 - std::sqrt(std::pow(OtherPoint->X - TempPoints[c]->X, 2) + std::pow(OtherPoint->Y - TempPoints[c]->Y, 2));
+              if (TempDeltaDistance < ThreadDeltaDistance)
+              {
+                  if (!Changed)
+                  {
+                       NextWidthHeight.push_back(ThreadDistance);
+                       Changed = true;
+                  }
+                  ThreadDeltaDistance = TempDeltaDistance;
+                  ThreadDistance = Distance2;
+                  ThreadChoosenPoint = CurrentPointP;
+                  ThreadBackpoint = OtherPoint;
+                  ThreadForwarpPoint = TempPoints[c];
+              }
+              OtherPoint = TempPoints[c]->NextPoint;
+              Distance2 = pointdistance + std::sqrt(std::pow(OtherPoint->X - CurrentPoint.X, 2) + std::pow(OtherPoint->Y - CurrentPoint.Y, 2));
+              TempDeltaDistance = Distance2 - std::sqrt(std::pow(OtherPoint->X - TempPoints[c]->X, 2) + std::pow(OtherPoint->Y - TempPoints[c]->Y, 2));
+              if (TempDeltaDistance < ThreadDeltaDistance)
+              {
+                  if (!Changed)
+                  {
+                      NextWidthHeight.push_back(ThreadDistance);
+                      Changed = true;
+                  }
+                  ThreadDeltaDistance = TempDeltaDistance;
+                  ThreadDistance = Distance2;
+                  ThreadChoosenPoint = CurrentPointP;
+                  ThreadBackpoint = TempPoints[c];
+                  ThreadForwarpPoint = OtherPoint;
+              }
+         }
+    }
+    if (Changed)
+    {
+         DeltaDistance[ThreadID] = ThreadDeltaDistance;
+         Distance[ThreadID] = ThreadDistance;
+         ChoosenPoint[ThreadID] = ThreadChoosenPoint;
+         ForwardPoint[ThreadID] = ThreadForwarpPoint;
+         BackPoint[ThreadID] = ThreadBackpoint;
+    }
+}
 void CppTSPalgorithm::OverlapMain()
 {
     LongestConnection += 4;

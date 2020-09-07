@@ -48,7 +48,8 @@ private:
     void ConnectBottomLeft();
     void ConnectLeftTop();
     void LogicMain();
-    void LogicMethod(unsigned short int);
+    void LogicMethodSingle();
+    void LogicMethodMulti(int, int, int, Point*,Point, double, double);
     void OverlapMain();
     void OverlapMethod(int);
     bool OverlapCheck(Point*, Point*, Point*, Point*);
