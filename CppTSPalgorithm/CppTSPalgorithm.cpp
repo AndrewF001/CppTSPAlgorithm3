@@ -650,6 +650,8 @@ void CppTSPalgorithm::LogicMain()
     //std::thread Worker[NumThreads];
     int shortest = 0;
     Points;
+    QuadTree* ParentNodeCopy = ParentNode;
+    int MaxThread = omp_get_max_threads();
     while (RouteSize != NumDots)
     {
         if (NumThreads != 1)
@@ -686,22 +688,23 @@ void CppTSPalgorithm::LogicMain()
             }
         }
         fill(Distance.begin(), Distance.end(), 3604);
-        NextWidthHeight.clear();
-        NextWidthHeight.push_back(3604);
+        //NextWidthHeight.clear();
+        //NextWidthHeight.push_back(3604);
         fill(DeltaDistance.begin(), DeltaDistance.end(), 3604);
-        if (NumThreads<2)
+        //LogicMethodSingle();
+        if (MaxThread<2)
         {
             LogicMethodSingle();
         }
         else
         {
-            omp_set_num_threads(NumThreads);
-#pragma omp parallel for
+            omp_set_num_threads(MaxThread);
+#pragma omp parallel for firstprivate(ParentNodeCopy)
                 for (int i = 0; i < NumDots; i++)
                 {
                      int ID = omp_get_thread_num();
                      if(!Points[i].Connected)
-                        LogicMethodMulti(i,ID,Distance[0]+20,&Points[i],Points[i],Distance[ID],DeltaDistance[ID]);
+                        LogicMethodMulti(i,ID,NextWidthHeight[0]+20,&Points[i],Points[i],Distance[ID],DeltaDistance[ID], ParentNodeCopy);
                 }
         }
         shortest = 0;        
@@ -784,7 +787,7 @@ void CppTSPalgorithm::LogicMethodSingle()
     }
 }
 
-void CppTSPalgorithm::LogicMethodMulti(int Place, int ThreadID, int Size, Point *CurrentPointP,Point CurrentPoint, double ThreadDistance, double ThreadDeltaDistance)
+void CppTSPalgorithm::LogicMethodMulti(int Place, int ThreadID, int Size, Point *CurrentPointP,Point CurrentPoint, double ThreadDistance, double ThreadDeltaDistance, QuadTree* ParentNodeCopy)
 {
     std::vector<Point*> TempPoints;
     Point* OtherPoint;
@@ -793,7 +796,7 @@ void CppTSPalgorithm::LogicMethodMulti(int Place, int ThreadID, int Size, Point 
     bool Changed = false;
     Point* ThreadChoosenPoint, * ThreadBackpoint, *ThreadForwarpPoint;
     TempPoints.reserve(NumDots);//probably overkill so optimize it later.            
-    ParentNode->ContainArea(&TempPoints, CurrentPoint.X - Offset, CurrentPoint.Y - Offset, WidthHeight, WidthHeight);
+    ParentNodeCopy->ContainArea(&TempPoints, CurrentPoint.X - Offset, CurrentPoint.Y - Offset, WidthHeight, WidthHeight);
     for (int c = 0; c < TempPoints.size(); c++)
     {
          if (TempPoints[c]->Connected)
@@ -805,10 +808,7 @@ void CppTSPalgorithm::LogicMethodMulti(int Place, int ThreadID, int Size, Point 
               if (TempDeltaDistance < ThreadDeltaDistance)
               {
                   if (!Changed)
-                  {
-                       NextWidthHeight.push_back(ThreadDistance);
                        Changed = true;
-                  }
                   ThreadDeltaDistance = TempDeltaDistance;
                   ThreadDistance = Distance2;
                   ThreadChoosenPoint = CurrentPointP;
@@ -821,10 +821,7 @@ void CppTSPalgorithm::LogicMethodMulti(int Place, int ThreadID, int Size, Point 
               if (TempDeltaDistance < ThreadDeltaDistance)
               {
                   if (!Changed)
-                  {
-                      NextWidthHeight.push_back(ThreadDistance);
                       Changed = true;
-                  }
                   ThreadDeltaDistance = TempDeltaDistance;
                   ThreadDistance = Distance2;
                   ThreadChoosenPoint = CurrentPointP;

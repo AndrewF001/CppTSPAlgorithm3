@@ -49,7 +49,7 @@ private:
     void ConnectLeftTop();
     void LogicMain();
     void LogicMethodSingle();
-    void LogicMethodMulti(int, int, int, Point*,Point, double, double);
+    void LogicMethodMulti(int, int, int, Point*,Point, double, double,QuadTree*);
     void OverlapMain();
     void OverlapMethod(int);
     bool OverlapCheck(Point*, Point*, Point*, Point*);
