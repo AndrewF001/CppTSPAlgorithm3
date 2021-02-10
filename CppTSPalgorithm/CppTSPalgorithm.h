@@ -24,6 +24,7 @@ private slots:
     void ShowGridMeth(bool);
     void FastModeMeth(bool);
     void FPSBoxChanged(int);
+    void NumThreadsChanged(int);
 
 private:
     void DrawCanvas(QPainter*);
@@ -77,7 +78,8 @@ private:
     Point* StartNode = nullptr;
     int RouteSize = 0;
 
-    const int NumThreads;
+    const int MaxNumThreads;
+    int ThreadNumbers = 1;
     std::vector<Point*> ChoosenPoint;
     std::vector<double> Distance;
     std::vector<double> DeltaDistance;

@@ -9,14 +9,15 @@
 
 //constructor, just links all the UI elements to their EventHandler slot
 CppTSPalgorithm::CppTSPalgorithm(QWidget *parent)
-    : QMainWindow(parent), NumThreads(omp_get_max_threads())
+    : QMainWindow(parent), MaxNumThreads(omp_get_max_threads())
 {
-    ChoosenPoint.resize(NumThreads);
-    Distance.resize(NumThreads);
-    DeltaDistance.resize(NumThreads);
-    BackPoint.resize(NumThreads);
-    ForwardPoint.resize(NumThreads);
+    ChoosenPoint.resize(MaxNumThreads);
+    Distance.resize(MaxNumThreads);
+    DeltaDistance.resize(MaxNumThreads);
+    BackPoint.resize(MaxNumThreads);
+    ForwardPoint.resize(MaxNumThreads);
     ui.setupUi(this);
+    ui.NumThreadBox->setMaximum(omp_get_max_threads());
     //connects UI event handlers to their methods
     connect(ui.StartBtn, SIGNAL(clicked()), this, SLOT(StartBtnClicked()));
     connect(ui.DelayBox, SIGNAL(valueChanged(int)), this,SLOT(DelayBoxChanged(int)));
@@ -25,6 +26,8 @@ CppTSPalgorithm::CppTSPalgorithm(QWidget *parent)
     connect(ui.ShowGridCheck, SIGNAL(toggled(bool)),this, SLOT(ShowGridMeth(bool)));
     connect(ui.FastModeCheck, SIGNAL(toggled(bool)), this, SLOT(FastModeMeth(bool)));
     connect(ui.FPSBox, SIGNAL(valueChanged(int)), this, SLOT(FPSBoxChanged(int)));
+    connect(ui.NumThreadBox, SIGNAL(valueChanged(int)), this, SLOT(NumThreadsChanged(int)));
+
 }
 
 //All grathics are done here
@@ -183,6 +186,10 @@ void CppTSPalgorithm::FPSBoxChanged(int value)
     FPS = value;
     CheckFastMode();
 }
+void CppTSPalgorithm::NumThreadsChanged(int value)
+{
+    ThreadNumbers = value;
+}
 //repeated code
 void CppTSPalgorithm::CheckFastMode()
 {
@@ -240,7 +247,7 @@ void CppTSPalgorithm::CreateQuadTreeMain()
 {
     ParentNode->Insert(&Points[0]);
     ParentNode->Insert(&Points[1]);
-    if (NumThreads == 1)
+    if (ThreadNumbers == 1)
     {
         CreateQuadTreeSub(0);
         CreateQuadTreeSub(1);
@@ -274,7 +281,7 @@ void CppTSPalgorithm::CreateQuadTreeSub(int section)
 void CppTSPalgorithm::FindPointMain()
 {
     std::thread SearchThreads[4];
-    if (NumThreads == 1)
+    if (ThreadNumbers == 1)
     {
         FindTopPoint();
         FindRightPoint();
@@ -409,7 +416,7 @@ void CppTSPalgorithm::FindLeftPoint()
 //create outer circle
 void CppTSPalgorithm::ConnecterMain()
 {
-    if (NumThreads == 1)
+    if (ThreadNumbers == 1)
     {
         ConnectTopRight();
         ConnectRightBottom();
@@ -654,11 +661,11 @@ void CppTSPalgorithm::LogicMain()
     int MaxThread = omp_get_max_threads();
     while (RouteSize != NumDots)
     {
-        if (NumThreads != 1)
+        if (ThreadNumbers != 1)
         {
             NextWidthHeight.clear();
             NextWidthHeight.push_back(3604);
-            for (int i = 0; i < NumThreads; i++)
+            for (int i = 0; i < ThreadNumbers; i++)
             {
                 if (i != shortest)
                 {
@@ -692,13 +699,13 @@ void CppTSPalgorithm::LogicMain()
         //NextWidthHeight.push_back(3604);
         fill(DeltaDistance.begin(), DeltaDistance.end(), 3604);
         //LogicMethodSingle();
-        if (MaxThread<2)
+        if (ThreadNumbers == 1)
         {
             LogicMethodSingle();
         }
         else
         {
-            omp_set_num_threads(MaxThread);
+            omp_set_num_threads(ThreadNumbers);
 #pragma omp parallel for firstprivate(ParentNodeCopy)
                 for (int i = 0; i < NumDots; i++)
                 {
@@ -708,7 +715,7 @@ void CppTSPalgorithm::LogicMain()
                 }
         }
         shortest = 0;        
-        for (int i = 1; i < NumThreads; i++)
+        for (int i = 1; i < ThreadNumbers; i++)
         {
             if (DeltaDistance[i] < DeltaDistance[shortest])
             {                
@@ -786,7 +793,6 @@ void CppTSPalgorithm::LogicMethodSingle()
         i ++;
     }
 }
-
 void CppTSPalgorithm::LogicMethodMulti(int Place, int ThreadID, int Size, Point *CurrentPointP,Point CurrentPoint, double ThreadDistance, double ThreadDeltaDistance, QuadTree* ParentNodeCopy)
 {
     std::vector<Point*> TempPoints;
@@ -839,22 +845,63 @@ void CppTSPalgorithm::LogicMethodMulti(int Place, int ThreadID, int Size, Point 
          BackPoint[ThreadID] = ThreadBackpoint;
     }
 }
+
 void CppTSPalgorithm::OverlapMain()
 {
+    bool Change = true;
     LongestConnection += 4;
-    if (NumThreads == 1)
+    if (ThreadNumbers == 1)
         OverlapMethod(0);
     else
     {
-        std::vector<std::thread> Worker;
-        Worker.resize(NumThreads);
-        for (int i = 0; i < NumThreads; i++)
+        int p = NumDots / (ThreadNumbers * 8);
+#pragma variable(p, rent)
+        while (Change)
         {
-            Worker[i] = std::thread(&CppTSPalgorithm::OverlapMethod, this, i);
-        }
-        for (int i = 0; i < NumThreads; i++)
-        {
-            Worker[i].join();
+            Change = false;
+#pragma omp parallel for schedule(dynamic, p)
+            for (int i = 0; i < NumDots; i++)
+            {
+                Point* CurrentNode = &Points[i];
+                std::vector<Point*> TempPoints;
+                ParentNode->ContainArea(&TempPoints, CurrentNode->X - LongestConnection, CurrentNode->Y - LongestConnection, LongestConnection * 2, LongestConnection * 2);
+                for (int c = 0; c < TempPoints.size(); c++)
+                {
+                    if (TempPoints[c] != CurrentNode && TempPoints[c] != CurrentNode->NextPoint && TempPoints[c]->NextPoint != CurrentNode)
+                    {
+                        if (OverlapCheck(CurrentNode, CurrentNode->NextPoint, TempPoints[c], TempPoints[c]->NextPoint))
+                        {
+                            Change = true;
+                            Point P1 = *CurrentNode;
+                            Point P2 = *CurrentNode->NextPoint;
+                            Point Q1 = *TempPoints[c];
+                            Point Q2 = *TempPoints[c]->NextPoint;
+                            Point* ChangePoint = CurrentNode->NextPoint->NextPoint;
+
+                            Q2.PreviousePoint = CurrentNode->NextPoint;
+                            P2.PreviousePoint = CurrentNode->NextPoint->NextPoint;
+                            P2.NextPoint = TempPoints[c]->NextPoint;
+                            Q1.NextPoint = TempPoints[c]->PreviousePoint;
+                            Q1.PreviousePoint = CurrentNode;
+                            P1.NextPoint = TempPoints[c];
+
+                            *TempPoints[c]->NextPoint = Q2;
+                            *CurrentNode->NextPoint = P2;
+                            *TempPoints[c] = Q1;
+                            *CurrentNode = P1;
+                            while (ChangePoint != CurrentNode->NextPoint)
+                            {
+                                Point* hold = ChangePoint->NextPoint;
+                                ChangePoint->NextPoint = ChangePoint->PreviousePoint;
+                                ChangePoint->PreviousePoint = hold;
+                                ChangePoint = hold;
+                            }
+                            //std::this_thread::sleep_for(std::chrono::seconds(5));
+                            c = TempPoints.size();
+                        }
+                    }
+                }
+            }
         }
     }
     Render = false;
@@ -909,11 +956,11 @@ void CppTSPalgorithm::OverlapMethod(int ThreadNum)
                 }
             }
 
-            for (int c = 0; c < NumThreads; c++)
+            for (int c = 0; c < ThreadNumbers; c++)
             {
                 CurrentNode = CurrentNode->NextPoint;
             }
-            i += NumThreads;
+            i += ThreadNumbers;
         }
     }
     
