@@ -104,10 +104,10 @@ void CppTSPalgorithm::StartBtnClicked()
     {
         //setup
         Timer.Reset();
-        ProgramRunning = true;      
+        ProgramRunning = true;
         Render = true;
         //Create QuadTree
-        std::thread QuadThread (&CppTSPalgorithm::CreateQuadTreeMain,this);
+        std::thread QuadThread(&CppTSPalgorithm::CreateQuadTreeMain,this);
         UIUpdateMethod();
         QuadThread.join();
         //Find valuable points
